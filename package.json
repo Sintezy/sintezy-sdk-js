@@ -1,0 +1,44 @@
+{
+  "name": "@sintezy/sdk",
+  "version": "0.1.0",
+  "description": "SDK oficial para integração com a plataforma Sintezy",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "lint": "eslint src/",
+    "test": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "sintezy",
+    "medical",
+    "transcription",
+    "healthcare",
+    "sdk"
+  ],
+  "author": "Sintezy",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sintezy/sintezy-sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  }
+}
