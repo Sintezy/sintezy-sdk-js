@@ -5,17 +5,17 @@ SDK oficial para integração com a plataforma Sintezy.
 ## Instalação
 
 ```bash
-npm install @sintezy/sdk
+npm install @sintezy-corp/sdk
 # ou
-yarn add @sintezy/sdk
+yarn add @sintezy-corp/sdk
 # ou
-pnpm add @sintezy/sdk
+pnpm add @sintezy-corp/sdk
 ```
 
 ## Uso Rápido
 
 ```typescript
-import { SintezySDK } from '@sintezy/sdk';
+import { SintezySDK } from '@sintezy-corp/sdk';
 
 // 1. Inicializar a SDK
 const sdk = new SintezySDK({
