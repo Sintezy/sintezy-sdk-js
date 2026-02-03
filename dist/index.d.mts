@@ -6,7 +6,7 @@
  *
  * @example
  * ```typescript
- * import { SintezySDK } from '@sintezy/sdk';
+ * import { SintezySDK } from '@sintezy-corp/sdk';
  *
  * const sdk = new SintezySDK({
  *   clientId: 'seu-client-id',
@@ -66,9 +66,9 @@ type DocumentType = 'MEDICAL_RECORD' | 'PRESCRIPTION' | 'CERTIFICATE' | 'REFERRA
 interface Document {
 }
 declare class SintezySDKError extends Error {
-    statusCode?: number | undefined;
-    code?: string | undefined;
-    constructor(message: string, statusCode?: number | undefined, code?: string | undefined);
+    statusCode?: number;
+    code?: string;
+    constructor(message: string, statusCode?: number, code?: string);
 }
 declare class SintezySDK {
     private config;

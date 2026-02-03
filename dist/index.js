@@ -1,4 +1,3 @@
-"use strict";
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
@@ -34,8 +33,9 @@ var SintezySDKError = class extends Error {
   }
 };
 var SintezySDK = class {
+  config;
+  token = null;
   constructor(config) {
-    this.token = null;
     if (!config.clientId || !config.clientSecret) {
       throw new SintezySDKError("clientId and clientSecret are required");
     }
@@ -49,7 +49,7 @@ var SintezySDK = class {
   // ============================================================
   /**
    * Autentica a aplicação usando OAuth 2.0 Client Credentials
-   * 
+   *
    * @returns Token de acesso
    */
   async authenticate() {
@@ -108,7 +108,7 @@ var SintezySDK = class {
   // ============================================================
   /**
    * Cria uma nova consulta (appointment)
-   * 
+   *
    * @param params Parâmetros para criação da consulta
    * @returns Dados da consulta criada
    */
@@ -117,7 +117,7 @@ var SintezySDK = class {
   }
   /**
    * Busca uma consulta pelo ID
-   * 
+   *
    * @param appointmentId ID da consulta
    * @returns Dados da consulta
    */
@@ -126,7 +126,7 @@ var SintezySDK = class {
   }
   /**
    * Busca o status de uma consulta
-   * 
+   *
    * @param appointmentId ID da consulta
    * @returns Status da consulta
    */
@@ -135,7 +135,7 @@ var SintezySDK = class {
   }
   /**
    * Lista todos os documentos de uma consulta
-   * 
+   *
    * @param appointmentId ID da consulta
    * @returns Mapa de documentos por tipo
    */
@@ -144,7 +144,7 @@ var SintezySDK = class {
   }
   /**
    * Busca um documento específico de uma consulta
-   * 
+   *
    * @param appointmentId ID da consulta
    * @param documentType Tipo do documento
    * @returns Documento
@@ -157,7 +157,7 @@ var SintezySDK = class {
   // ============================================================
   /**
    * Gera um documento a partir de uma consulta
-   * 
+   *
    * @param appointmentId ID da consulta
    * @param documentType Tipo do documento a ser gerado
    * @returns Documento gerado
@@ -169,7 +169,7 @@ var SintezySDK = class {
   }
   /**
    * Busca um documento gerado
-   * 
+   *
    * @param documentId ID do documento
    * @returns Dados do documento
    */
@@ -198,7 +198,7 @@ var SintezySDK = class {
       method,
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${this.token.accessToken}`
+        Authorization: `Bearer ${this.token.accessToken}`
       },
       body: body ? JSON.stringify(body) : void 0
     });
