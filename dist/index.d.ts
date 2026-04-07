@@ -63,6 +63,14 @@ interface GenerateDocumentParams {
     documentType: DocumentType;
 }
 type DocumentType = 'MEDICAL_RECORD' | 'PRESCRIPTION' | 'CERTIFICATE' | 'REFERRAL' | 'EXAM_REQUEST';
+interface SubscriptionStatus {
+    email: string;
+    hasSubscription: boolean;
+    status?: string;
+    planType?: string;
+    endDate?: string;
+    checkoutUrl?: string;
+}
 interface Document {
 }
 declare class SintezySDKError extends Error {
@@ -135,6 +143,14 @@ declare class SintezySDK {
      */
     getAppointmentDocument(appointmentId: string, documentType: string): Promise<Document>;
     /**
+     * Consulta o status da assinatura de um email.
+     * Disponível apenas para API Keys do tipo unauthenticated (reseller).
+     *
+     * @param email Email do usuário a consultar
+     * @returns Status da assinatura
+     */
+    getSubscriptionStatus(email: string): Promise<SubscriptionStatus>;
+    /**
      * Gera um documento a partir de uma consulta
      *
      * @param appointmentId ID da consulta
@@ -160,4 +176,4 @@ declare class SintezySDK {
     private request;
 }
 
-export { type Appointment, type AuthToken, type CreateAppointmentParams, type Document, type DocumentType, type GenerateDocumentParams, SintezySDK, type SintezySDKConfig, SintezySDKError, SintezySDK as default };
+export { type Appointment, type AuthToken, type CreateAppointmentParams, type Document, type DocumentType, type GenerateDocumentParams, SintezySDK, type SintezySDKConfig, SintezySDKError, type SubscriptionStatus, SintezySDK as default };

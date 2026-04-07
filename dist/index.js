@@ -31,6 +31,8 @@ var SintezySDKError = class extends Error {
     this.code = code;
     this.name = "SintezySDKError";
   }
+  statusCode;
+  code;
 };
 var SintezySDK = class {
   config;
@@ -151,6 +153,22 @@ var SintezySDK = class {
    */
   async getAppointmentDocument(appointmentId, documentType) {
     return this.request("GET", `/sdk/appointments/${appointmentId}/document/${documentType}`);
+  }
+  // ============================================================
+  // SUBSCRIPTION STATUS (ASSINATURA)
+  // ============================================================
+  /**
+   * Consulta o status da assinatura de um email.
+   * Disponível apenas para API Keys do tipo unauthenticated (reseller).
+   *
+   * @param email Email do usuário a consultar
+   * @returns Status da assinatura
+   */
+  async getSubscriptionStatus(email) {
+    return this.request(
+      "GET",
+      `/sdk/subscription-status?email=${encodeURIComponent(email)}`
+    );
   }
   // ============================================================
   // DOCUMENTOS
