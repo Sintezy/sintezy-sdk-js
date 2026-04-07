@@ -79,6 +79,15 @@ export type DocumentType =
   | 'REFERRAL'
   | 'EXAM_REQUEST';
 
+export interface SubscriptionStatus {
+  email: string;
+  hasSubscription: boolean;
+  status?: string;
+  planType?: string;
+  endDate?: string;
+  checkoutUrl?: string;
+}
+
 export interface Document {}
 
 // ============================================================
@@ -240,6 +249,24 @@ export class SintezySDK {
     documentType: string
   ): Promise<Document> {
     return this.request('GET', `/sdk/appointments/${appointmentId}/document/${documentType}`);
+  }
+
+  // ============================================================
+  // SUBSCRIPTION STATUS (ASSINATURA)
+  // ============================================================
+
+  /**
+   * Consulta o status da assinatura de um email.
+   * Disponível apenas para API Keys do tipo unauthenticated (reseller).
+   *
+   * @param email Email do usuário a consultar
+   * @returns Status da assinatura
+   */
+  async getSubscriptionStatus(email: string): Promise<SubscriptionStatus> {
+    return this.request<SubscriptionStatus>(
+      'GET',
+      `/sdk/subscription-status?email=${encodeURIComponent(email)}`
+    );
   }
 
   // ============================================================
