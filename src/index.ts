@@ -79,6 +79,13 @@ export type DocumentType =
   | 'REFERRAL'
   | 'EXAM_REQUEST';
 
+export interface Transcription {
+  secureId: string;
+  transcription: string | null;
+  recordedTimeSeconds?: number;
+  status: string;
+}
+
 export interface SubscriptionStatus {
   email: string;
   hasSubscription: boolean;
@@ -249,6 +256,23 @@ export class SintezySDK {
     documentType: string
   ): Promise<Document> {
     return this.request('GET', `/sdk/appointments/${appointmentId}/document/${documentType}`);
+  }
+
+  // ============================================================
+  // TRANSCRIPTION (TRANSCRIÇÃO)
+  // ============================================================
+
+  /**
+   * Busca a transcrição de uma consulta.
+   *
+   * @param appointmentId ID da consulta
+   * @returns Transcrição da consulta
+   */
+  async getTranscription(appointmentId: string): Promise<Transcription> {
+    return this.request<Transcription>(
+      'GET',
+      `/sdk/appointments/${appointmentId}/transcription`
+    );
   }
 
   // ============================================================
