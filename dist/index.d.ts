@@ -63,6 +63,12 @@ interface GenerateDocumentParams {
     documentType: DocumentType;
 }
 type DocumentType = 'MEDICAL_RECORD' | 'PRESCRIPTION' | 'CERTIFICATE' | 'REFERRAL' | 'EXAM_REQUEST';
+interface Transcription {
+    secureId: string;
+    transcription: string | null;
+    recordedTimeSeconds?: number;
+    status: string;
+}
 interface SubscriptionStatus {
     email: string;
     hasSubscription: boolean;
@@ -143,6 +149,13 @@ declare class SintezySDK {
      */
     getAppointmentDocument(appointmentId: string, documentType: string): Promise<Document>;
     /**
+     * Busca a transcrição de uma consulta.
+     *
+     * @param appointmentId ID da consulta
+     * @returns Transcrição da consulta
+     */
+    getTranscription(appointmentId: string): Promise<Transcription>;
+    /**
      * Consulta o status da assinatura de um email.
      * Disponível apenas para API Keys do tipo unauthenticated (reseller).
      *
@@ -176,4 +189,4 @@ declare class SintezySDK {
     private request;
 }
 
-export { type Appointment, type AuthToken, type CreateAppointmentParams, type Document, type DocumentType, type GenerateDocumentParams, SintezySDK, type SintezySDKConfig, SintezySDKError, type SubscriptionStatus, SintezySDK as default };
+export { type Appointment, type AuthToken, type CreateAppointmentParams, type Document, type DocumentType, type GenerateDocumentParams, SintezySDK, type SintezySDKConfig, SintezySDKError, type SubscriptionStatus, type Transcription, SintezySDK as default };

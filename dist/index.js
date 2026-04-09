@@ -155,6 +155,21 @@ var SintezySDK = class {
     return this.request("GET", `/sdk/appointments/${appointmentId}/document/${documentType}`);
   }
   // ============================================================
+  // TRANSCRIPTION (TRANSCRIÇÃO)
+  // ============================================================
+  /**
+   * Busca a transcrição de uma consulta.
+   *
+   * @param appointmentId ID da consulta
+   * @returns Transcrição da consulta
+   */
+  async getTranscription(appointmentId) {
+    return this.request(
+      "GET",
+      `/sdk/appointments/${appointmentId}/transcription`
+    );
+  }
+  // ============================================================
   // SUBSCRIPTION STATUS (ASSINATURA)
   // ============================================================
   /**
