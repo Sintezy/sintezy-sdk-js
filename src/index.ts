@@ -57,6 +57,8 @@ export interface CreateAppointmentParams {
   userOccupationDoc?: string;
   /** Metadados extras (opcional) */
   metadata?: Record<string, unknown>;
+  /** URL de redirecionamento após geração do documento. Se fornecida, o portal redireciona para esta URL ao invés de fechar a janela. (opcional) */
+  redirectUrl?: string;
 }
 
 export interface Appointment {
