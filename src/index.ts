@@ -1,8 +1,7 @@
 /**
  * Sintezy SDK - Integração para sistemas de terceiros
  *
- * Esta SDK permite integrar o sistema Sintezy em aplicações de terceiros,
- * oferecendo funcionalidades de transcrição médica e geração de documentos.
+ * Transcrição médica e geração de documentos a partir da consulta.
  *
  * @example
  * ```typescript
@@ -11,22 +10,29 @@
  * const sdk = new SintezySDK({
  *   clientId: 'seu-client-id',
  *   clientSecret: 'seu-client-secret',
- *   environment: 'production', // ou 'sandbox'
  * });
  *
- * // Autenticar
- * await sdk.authenticate();
+ * // 1. Criar a consulta e abrir o portal para o médico gravar
+ * const appointment = await sdk.createAppointment({
+ *   userEmail: 'medico@clinica.com',
+ *   userName: 'Dr. João Silva',
+ *   layout: {
+ *     fields: [
+ *       { name: 'Queixa Principal', content: 'inserir aqui...', position: 0 },
+ *       { name: 'Conduta', content: 'inserir aqui...', position: 1 },
+ *     ],
+ *   },
+ * });
+ * window.open(appointment.portalUrl);
  *
- * // Criar consulta
- * const appointment = await sdk.createAppointment({ userEmail: 'medico@clinica.com' });
- *
- * // Gerar documento
- * const document = await sdk.generateDocument(appointment.id, 'MEDICAL_RECORD');
+ * // 2. Depois de finalizada, ler a anamnese e gerar outros documentos
+ * const anamnese = await sdk.getDocument(appointment.secureId, 'document');
+ * const receita = await sdk.generateDocument(appointment.secureId, 'prescription');
  * ```
  */
 
 // ============================================================
-// INTERFACES E TIPOS
+// TYPES
 // ============================================================
 
 export interface SintezySDKConfig {
@@ -44,42 +50,113 @@ export interface AuthToken {
   expiresAt: Date;
 }
 
+/** Campo do layout da anamnese: o `content` é a instrução para a IA. */
+export interface LayoutField {
+  name: string;
+  content?: string;
+  position?: number;
+}
+
+export interface Layout {
+  fields: LayoutField[];
+}
+
 export interface CreateAppointmentParams {
-  /** Email do usuário (médico/profissional). Se não existir, será criado automaticamente */
+  /** Email do médico. Se não existir, o usuário é criado automaticamente. */
   userEmail: string;
-  /** Nome do usuário (opcional, usado na criação) */
-  userName?: string;
-  /** Telefone do usuário (opcional) */
+  /** Nome do médico. */
+  userName: string;
+  /** Estrutura da anamnese: um campo por seção do seu prontuário. */
+  layout: Layout;
   userPhone?: string;
-  /** Profissão/especialidade (opcional) */
   userOccupation?: string;
-  /** Documento profissional - CRM, CRO, etc (opcional) */
   userOccupationDoc?: string;
-  /** Metadados extras (opcional) */
+  title?: string;
+  type?: 'NORMAL' | 'RETORNO';
+  modality?: 'PRESENCIAL' | 'ONLINE';
+  /** Observações pré-consulta. */
+  notes?: string;
+  /** Histórico do paciente — a IA usa na geração dos documentos. */
+  context?: string;
   metadata?: Record<string, unknown>;
-  /** URL de redirecionamento após geração do documento. Se fornecida, o portal redireciona para esta URL ao invés de fechar a janela. (opcional) */
+  /**
+   * URL de redirecionamento após a geração do documento. Se fornecida, o
+   * portal redireciona para ela em vez de fechar a janela.
+   */
   redirectUrl?: string;
 }
 
 export interface Appointment {
-  id: string;
   secureId: string;
-  userId: string;
   status: string;
   createdAt: string;
+  title?: string;
+  /** URL do portal de gravação, para abrir em popup ou iframe. */
+  portalUrl: string;
 }
 
-export interface GenerateDocumentParams {
-  consultationId: string;
-  documentType: DocumentType;
+/** Tipos servidos pelos modelos padrão da Sintezy. */
+export type CatalogDocumentType =
+  | 'document'
+  | 'anamnese_summary'
+  | 'clinic_summary'
+  | 'referral'
+  | 'exames_call'
+  | 'prescription'
+  | 'certificate'
+  | 'inss_report';
+
+export const CATALOG_DOCUMENT_TYPES: CatalogDocumentType[] = [
+  'document',
+  'anamnese_summary',
+  'clinic_summary',
+  'referral',
+  'exames_call',
+  'prescription',
+  'certificate',
+  'inss_report',
+];
+
+/**
+ * Um tipo do catálogo, ou o nome que você dá ao seu próprio documento.
+ * O `(string & {})` preserva o autocomplete dos tipos do catálogo sem
+ * impedir um nome livre.
+ */
+export type DocumentType = CatalogDocumentType | (string & {});
+
+/** Prompt do documento: os dois campos andam sempre juntos. */
+export interface DocumentPrompt {
+  /** Objetivo, tom, regras e informações obrigatórias. */
+  contextualization: string;
+  /** Como o texto deve aparecer: seções, quebras de linha, assinatura. */
+  format: string;
 }
 
-export type DocumentType =
-  | 'MEDICAL_RECORD'
-  | 'PRESCRIPTION'
-  | 'CERTIFICATE'
-  | 'REFERRAL'
-  | 'EXAM_REQUEST';
+/**
+ * Corpo aceito por `generateDocument`:
+ *  - `{ documentType }` — tipo do catálogo com o prompt padrão da Sintezy;
+ *  - `{ documentType, ...prompt }` — mesmo tipo, com o SEU prompt;
+ *  - `{ documentType: 'meu_nome', ...prompt }` — documento com nome próprio;
+ *  - `{ ...prompt }` — idem, gravado com o nome `custom`.
+ */
+export interface GenerateDocumentInput extends Partial<DocumentPrompt> {
+  documentType?: DocumentType;
+}
+
+export interface Document {
+  secureId: string;
+  /** O tipo com que o documento ficou gravado — use-o no `getDocument`. */
+  type: string;
+  content: unknown;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface DocumentListItem {
+  type: string;
+  exists: boolean;
+  createdAt?: string;
+}
 
 export interface Transcription {
   secureId: string;
@@ -97,10 +174,13 @@ export interface SubscriptionStatus {
   checkoutUrl?: string;
 }
 
-export interface Document {}
+export interface DeleteResult {
+  message: string;
+  deleted: boolean;
+}
 
 // ============================================================
-// CLASSES
+// ERROR CLASS
 // ============================================================
 
 export class SintezySDKError extends Error {
@@ -114,6 +194,10 @@ export class SintezySDKError extends Error {
   }
 }
 
+// ============================================================
+// MAIN SDK CLASS
+// ============================================================
+
 export class SintezySDK {
   private config: SintezySDKConfig;
   private token: AuthToken | null = null;
@@ -122,7 +206,6 @@ export class SintezySDK {
     if (!config.clientId || !config.clientSecret) {
       throw new SintezySDKError('clientId and clientSecret are required');
     }
-
     this.config = {
       environment: 'production',
       ...config,
@@ -133,17 +216,11 @@ export class SintezySDK {
   // AUTENTICAÇÃO
   // ============================================================
 
-  /**
-   * Autentica a aplicação usando OAuth 2.0 Client Credentials
-   *
-   * @returns Token de acesso
-   */
+  /** Autentica via OAuth 2.0 Client Credentials. */
   async authenticate(): Promise<AuthToken> {
     const response = await fetch(`${this.getBaseUrl()}/oauth/token`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         grant_type: 'client_credentials',
         client_id: this.config.clientId,
@@ -152,16 +229,14 @@ export class SintezySDK {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new SintezySDKError(
-        error.message || 'Authentication failed',
-        response.status,
-        'AUTH_FAILED'
-      );
+      throw await this.toError(response, 'Authentication failed', 'AUTH_FAILED');
     }
 
-    const data = await response.json();
-
+    const data = (await response.json()) as {
+      access_token: string;
+      expires_in: number;
+      token_type: string;
+    };
     this.token = {
       accessToken: data.access_token,
       expiresIn: data.expires_in,
@@ -172,25 +247,17 @@ export class SintezySDK {
     return this.token;
   }
 
-  /**
-   * Verifica se está autenticado e se o token ainda é válido
-   */
+  /** True se há token e ele ainda vale por mais de um minuto. */
   isAuthenticated(): boolean {
     if (!this.token) return false;
-    // Considera expirado se faltar menos de 1 minuto
-    return this.token.expiresAt.getTime() > Date.now() + 60000;
+    return this.token.expiresAt.getTime() > Date.now() + 60_000;
   }
 
-  /**
-   * Retorna o token atual (ou null se não autenticado)
-   */
   getToken(): AuthToken | null {
     return this.token;
   }
 
-  /**
-   * Garante que há um token válido, re-autenticando se necessário
-   */
+  /** Autentica se necessário. Chamado por todos os métodos. */
   async ensureAuthenticated(): Promise<AuthToken> {
     if (!this.isAuthenticated()) {
       return this.authenticate();
@@ -199,97 +266,47 @@ export class SintezySDK {
   }
 
   // ============================================================
-  // APPOINTMENTS (CONSULTAS)
+  // CONSULTAS
   // ============================================================
 
-  /**
-   * Cria uma nova consulta (appointment)
-   *
-   * @param params Parâmetros para criação da consulta
-   * @returns Dados da consulta criada
-   */
-  async createAppointment(params: CreateAppointmentParams): Promise<Appointment> {
-    return this.request<Appointment>('POST', '/sdk/appointments', params);
+  /** Cria a consulta e devolve a URL do portal de gravação. */
+  async createAppointment(
+    params: CreateAppointmentParams
+  ): Promise<Appointment> {
+    if (!params.layout?.fields?.length) {
+      throw new SintezySDKError(
+        'layout.fields é obrigatório: informe ao menos um campo da anamnese'
+      );
+    }
+    return this.request('POST', '/sdk/appointments', params);
   }
 
-  /**
-   * Busca uma consulta pelo ID
-   *
-   * @param appointmentId ID da consulta
-   * @returns Dados da consulta
-   */
-  async getAppointment(appointmentId: string): Promise<Appointment> {
-    return this.request<Appointment>('GET', `/sdk/appointments/${appointmentId}`);
-  }
-
-  /**
-   * Busca o status de uma consulta
-   *
-   * @param appointmentId ID da consulta
-   * @returns Status da consulta
-   */
-  async getAppointmentStatus(
-    appointmentId: string
-  ): Promise<{ status: string; updatedAt: string; hasMainDocument: boolean }> {
-    return this.request('GET', `/sdk/appointments/${appointmentId}/status`);
-  }
-
-  /**
-   * Lista todos os documentos de uma consulta
-   *
-   * @param appointmentId ID da consulta
-   * @returns Mapa de documentos por tipo
-   */
-  async getAppointmentDocuments(
-    appointmentId: string
-  ): Promise<Record<string, { exists: boolean }>> {
-    return this.request('GET', `/sdk/appointments/${appointmentId}/documents`);
-  }
-
-  /**
-   * Busca um documento específico de uma consulta
-   *
-   * @param appointmentId ID da consulta
-   * @param documentType Tipo do documento
-   * @returns Documento
-   */
-  async getAppointmentDocument(
-    appointmentId: string,
-    documentType: string
-  ): Promise<Document> {
-    return this.request('GET', `/sdk/appointments/${appointmentId}/document/${documentType}`);
-  }
-
-  // ============================================================
-  // TRANSCRIPTION (TRANSCRIÇÃO)
-  // ============================================================
-
-  /**
-   * Busca a transcrição de uma consulta.
-   *
-   * @param appointmentId ID da consulta
-   * @returns Transcrição da consulta
-   */
-  async getTranscription(appointmentId: string): Promise<Transcription> {
-    return this.request<Transcription>(
+  async getAppointment(appointmentSecureId: string): Promise<Appointment> {
+    return this.request(
       'GET',
-      `/sdk/appointments/${appointmentId}/transcription`
+      `/sdk/appointments/${encodeURIComponent(appointmentSecureId)}`
     );
   }
 
-  // ============================================================
-  // SUBSCRIPTION STATUS (ASSINATURA)
-  // ============================================================
+  /** Exclui a consulta (soft delete). */
+  async deleteAppointment(appointmentSecureId: string): Promise<DeleteResult> {
+    return this.request(
+      'DELETE',
+      `/sdk/appointments/${encodeURIComponent(appointmentSecureId)}`
+    );
+  }
 
-  /**
-   * Consulta o status da assinatura de um email.
-   * Disponível apenas para API Keys do tipo unauthenticated (reseller).
-   *
-   * @param email Email do usuário a consultar
-   * @returns Status da assinatura
-   */
+  /** Transcrição da consulta, quando a gravação já terminou. */
+  async getTranscription(appointmentSecureId: string): Promise<Transcription> {
+    return this.request(
+      'GET',
+      `/sdk/appointments/${encodeURIComponent(appointmentSecureId)}/transcription`
+    );
+  }
+
+  /** Status da assinatura de um médico (API keys do tipo reseller). */
   async getSubscriptionStatus(email: string): Promise<SubscriptionStatus> {
-    return this.request<SubscriptionStatus>(
+    return this.request(
       'GET',
       `/sdk/subscription-status?email=${encodeURIComponent(email)}`
     );
@@ -300,52 +317,127 @@ export class SintezySDK {
   // ============================================================
 
   /**
-   * Gera um documento a partir de uma consulta
+   * Gera um documento da consulta, que precisa estar finalizada.
    *
-   * @param appointmentId ID da consulta
-   * @param documentType Tipo do documento a ser gerado
-   * @returns Documento gerado
+   * @example
+   * ```typescript
+   * // Tipo do catálogo, prompt padrão da Sintezy
+   * await sdk.generateDocument(id, 'prescription');
+   *
+   * // Mesmo tipo, com o seu prompt (continua sendo `clinic_summary`)
+   * await sdk.generateDocument(id, {
+   *   documentType: 'clinic_summary',
+   *   contextualization: '...',
+   *   format: '...',
+   * });
+   *
+   * // Documento com nome próprio, buscado depois por esse nome
+   * await sdk.generateDocument(id, {
+   *   documentType: 'carta_alta',
+   *   contextualization: '...',
+   *   format: '...',
+   * });
+   * ```
    */
   async generateDocument(
-    appointmentId: string,
-    documentType: DocumentType
+    appointmentSecureId: string,
+    input: DocumentType | GenerateDocumentInput
   ): Promise<Document> {
-    return this.request('POST', `/sdk/appointments/${appointmentId}/documents`, {
-      documentType,
-    });
+    const body: GenerateDocumentInput =
+      typeof input === 'string' ? { documentType: input } : { ...input };
+
+    const hasPrompt =
+      body.contextualization !== undefined || body.format !== undefined;
+    if (hasPrompt && (!body.contextualization || !body.format)) {
+      throw new SintezySDKError(
+        'contextualization e format são obrigatórios juntos'
+      );
+    }
+    if (!body.documentType && !hasPrompt) {
+      throw new SintezySDKError(
+        'informe um documentType ou o par contextualization + format'
+      );
+    }
+    if (
+      body.documentType &&
+      !CATALOG_DOCUMENT_TYPES.includes(body.documentType as CatalogDocumentType) &&
+      !hasPrompt
+    ) {
+      throw new SintezySDKError(
+        `"${body.documentType}" não é um tipo do catálogo (${CATALOG_DOCUMENT_TYPES.join(', ')}), ` +
+          'então é o nome do seu documento e exige contextualization + format'
+      );
+    }
+
+    return this.request(
+      'POST',
+      `/sdk/appointments/${encodeURIComponent(appointmentSecureId)}/documents`,
+      body
+    );
   }
 
   /**
-   * Busca um documento gerado
+   * Busca um documento já gerado.
    *
-   * @param documentId ID do documento
-   * @returns Dados do documento
+   * @param documentType Tipo do catálogo, ou o nome que você usou ao gerar
+   *                     (`custom` quando você não informou nenhum).
    */
-  async getDocument(documentId: string): Promise<Document> {
-    return this.request('GET', `/sdk/documents/${documentId}`);
+  async getDocument(
+    appointmentSecureId: string,
+    documentType: DocumentType
+  ): Promise<Document> {
+    return this.request(
+      'GET',
+      `/sdk/appointments/${encodeURIComponent(appointmentSecureId)}/documents/${encodeURIComponent(documentType)}`
+    );
+  }
+
+  /** Lista os documentos da consulta e quais já foram gerados. */
+  async listDocuments(
+    appointmentSecureId: string
+  ): Promise<DocumentListItem[]> {
+    return this.request(
+      'GET',
+      `/sdk/appointments/${encodeURIComponent(appointmentSecureId)}/documents`
+    );
   }
 
   // ============================================================
   // HELPERS INTERNOS
   // ============================================================
 
-  /**
-   * Retorna a URL base da API
-   */
   private getBaseUrl(): string {
     if (this.config.baseUrl) {
       return this.config.baseUrl;
     }
-
     return this.config.environment === 'production'
       ? 'https://api.sintezy.com'
       : 'https://sandbox-api.sintezy.com';
   }
 
   /**
-   * Faz uma requisição autenticada para a API
-   * Re-autentica automaticamente se o token expirou
+   * Erro da API já traduzido; `message` pode vir string ou array (erros de
+   * validação). Tipado estruturalmente para não exigir a lib DOM no build.
    */
+  private async toError(
+    response: { status: number; json(): Promise<unknown> },
+    fallback: string,
+    code?: string
+  ): Promise<SintezySDKError> {
+    const body = (await response.json().catch(() => ({}))) as {
+      message?: string | string[];
+      error?: string | string[];
+      code?: string;
+    };
+    const raw = body.message ?? body.error;
+    const message = Array.isArray(raw) ? raw.join('; ') : raw;
+    return new SintezySDKError(
+      message || fallback,
+      response.status,
+      body.code ?? code
+    );
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -359,19 +451,14 @@ export class SintezySDK {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.token!.accessToken}`,
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new SintezySDKError(
-        error.message || `Request failed: ${method} ${path}`,
-        response.status,
-        error.code
-      );
+      throw await this.toError(response, `Request failed: ${method} ${path}`);
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 }
 

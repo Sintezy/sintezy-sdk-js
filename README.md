@@ -71,9 +71,16 @@ const atestado = await sdk.generateDocument(appointment.secureId, 'certificate')
 
 | Método | Descrição |
 |--------|-----------|
-| `generateDocument(secureId, type)` | Gera um documento a partir de uma consulta finalizada |
-| `getDocument(secureId, type)` | Busca um documento específico |
-| `listDocuments(secureId)` | Lista todos os documentos disponíveis |
+| `generateDocument(secureId, tipoOuParams)` | Gera um documento de uma consulta finalizada |
+| `getDocument(secureId, tipo)` | Busca um documento já gerado |
+| `listDocuments(secureId)` | Lista os documentos e quais já existem |
+
+### Transcrição e assinatura
+
+| Método | Descrição |
+|--------|-----------|
+| `getTranscription(secureId)` | Transcrição da consulta, após a gravação |
+| `getSubscriptionStatus(email)` | Status da assinatura do médico (API keys reseller) |
 
 ## Tipos de Documento
 
@@ -87,6 +94,52 @@ const atestado = await sdk.generateDocument(appointment.secureId, 'certificate')
 | `prescription` | Receita médica |
 | `certificate` | Atestado médico |
 | `inss_report` | Laudo INSS |
+
+## Documentos com o seu prompt
+
+Além dos tipos acima, você pode escrever o próprio prompt do documento, com os
+mesmos dois textos que o médico preenche no portal da Sintezy:
+
+- **`contextualization`**: objetivo do documento, tom esperado, regras e
+  informações obrigatórias.
+- **`format`**: como o texto deve aparecer, com seções, quebras de linha,
+  título e assinatura.
+
+Os dois são sempre obrigatórios juntos. Nada do que você envia fica cadastrado
+na Sintezy: reenvie o prompt a cada geração.
+
+```typescript
+// Tipo do catálogo com o SEU prompt.
+// Continua sendo clinic_summary e é buscado por esse tipo.
+await sdk.generateDocument(secureId, {
+  documentType: 'clinic_summary',
+  contextualization: 'Explique a consulta ao paciente em linguagem simples...',
+  format: 'RESUMO DA CONSULTA\n\nOlá, [NOME]...',
+});
+
+// Documento que não é de nenhum tipo do catálogo: o documentType vira o NOME
+// que você dá a ele, e a busca depois é por esse nome.
+await sdk.generateDocument(secureId, {
+  documentType: 'carta_alta',
+  contextualization: '...',
+  format: '...',
+});
+const carta = await sdk.getDocument(secureId, 'carta_alta');
+
+// Sem documentType, o documento é gravado com o nome `custom`.
+await sdk.generateDocument(secureId, { contextualization: '...', format: '...' });
+const custom = await sdk.getDocument(secureId, 'custom');
+```
+
+Regras que valem a pena saber:
+
+- Um documento por nome, por consulta. Regerar com o mesmo `documentType`
+  substitui o anterior; nomes diferentes convivem.
+- O nome aceita `a-z`, `0-9`, `_` e `-`, até 64 caracteres.
+- A anamnese principal (`document`) segue o layout da consulta e não aceita
+  prompt próprio.
+- A consulta precisa estar finalizada.
+- Use sempre `documento.type` da resposta para buscar depois.
 
 ## API
 
@@ -137,10 +190,6 @@ const atestado = await sdk.generateDocument(appointment.secureId, 'certificate')
          │   prescription        │                       │
          │<──────────────────────│                       │
 ```
-
-## Licença
-
-MIT
 
 ## Licença
 
