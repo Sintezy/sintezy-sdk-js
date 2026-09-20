@@ -1,8 +1,7 @@
 /**
  * Sintezy SDK - Integração para sistemas de terceiros
  *
- * Esta SDK permite integrar o sistema Sintezy em aplicações de terceiros,
- * oferecendo funcionalidades de transcrição médica e geração de documentos.
+ * Transcrição médica e geração de documentos a partir da consulta.
  *
  * @example
  * ```typescript
@@ -11,17 +10,24 @@
  * const sdk = new SintezySDK({
  *   clientId: 'seu-client-id',
  *   clientSecret: 'seu-client-secret',
- *   environment: 'production', // ou 'sandbox'
  * });
  *
- * // Autenticar
- * await sdk.authenticate();
+ * // 1. Criar a consulta e abrir o portal para o médico gravar
+ * const appointment = await sdk.createAppointment({
+ *   userEmail: 'medico@clinica.com',
+ *   userName: 'Dr. João Silva',
+ *   layout: {
+ *     fields: [
+ *       { name: 'Queixa Principal', content: 'inserir aqui...', position: 0 },
+ *       { name: 'Conduta', content: 'inserir aqui...', position: 1 },
+ *     ],
+ *   },
+ * });
+ * window.open(appointment.portalUrl);
  *
- * // Criar consulta
- * const appointment = await sdk.createAppointment({ userEmail: 'medico@clinica.com' });
- *
- * // Gerar documento
- * const document = await sdk.generateDocument(appointment.id, 'MEDICAL_RECORD');
+ * // 2. Depois de finalizada, ler a anamnese e gerar outros documentos
+ * const anamnese = await sdk.getDocument(appointment.secureId, 'document');
+ * const receita = await sdk.generateDocument(appointment.secureId, 'prescription');
  * ```
  */
 interface SintezySDKConfig {
@@ -37,34 +43,86 @@ interface AuthToken {
     /** Timestamp de quando o token expira */
     expiresAt: Date;
 }
+/** Campo do layout da anamnese: o `content` é a instrução para a IA. */
+interface LayoutField {
+    name: string;
+    content?: string;
+    position?: number;
+}
+interface Layout {
+    fields: LayoutField[];
+}
 interface CreateAppointmentParams {
-    /** Email do usuário (médico/profissional). Se não existir, será criado automaticamente */
+    /** Email do médico. Se não existir, o usuário é criado automaticamente. */
     userEmail: string;
-    /** Nome do usuário (opcional, usado na criação) */
-    userName?: string;
-    /** Telefone do usuário (opcional) */
+    /** Nome do médico. */
+    userName: string;
+    /** Estrutura da anamnese: um campo por seção do seu prontuário. */
+    layout: Layout;
     userPhone?: string;
-    /** Profissão/especialidade (opcional) */
     userOccupation?: string;
-    /** Documento profissional - CRM, CRO, etc (opcional) */
     userOccupationDoc?: string;
-    /** Metadados extras (opcional) */
+    title?: string;
+    type?: 'NORMAL' | 'RETORNO';
+    modality?: 'PRESENCIAL' | 'ONLINE';
+    /** Observações pré-consulta. */
+    notes?: string;
+    /** Histórico do paciente — a IA usa na geração dos documentos. */
+    context?: string;
     metadata?: Record<string, unknown>;
-    /** URL de redirecionamento após geração do documento. Se fornecida, o portal redireciona para esta URL ao invés de fechar a janela. (opcional) */
+    /**
+     * URL de redirecionamento após a geração do documento. Se fornecida, o
+     * portal redireciona para ela em vez de fechar a janela.
+     */
     redirectUrl?: string;
 }
 interface Appointment {
-    id: string;
     secureId: string;
-    userId: string;
     status: string;
     createdAt: string;
+    title?: string;
+    /** URL do portal de gravação, para abrir em popup ou iframe. */
+    portalUrl: string;
 }
-interface GenerateDocumentParams {
-    consultationId: string;
-    documentType: DocumentType;
+/** Tipos servidos pelos modelos padrão da Sintezy. */
+type CatalogDocumentType = 'document' | 'anamnese_summary' | 'clinic_summary' | 'referral' | 'exames_call' | 'prescription' | 'certificate' | 'inss_report';
+declare const CATALOG_DOCUMENT_TYPES: CatalogDocumentType[];
+/**
+ * Um tipo do catálogo, ou o nome que você dá ao seu próprio documento.
+ * O `(string & {})` preserva o autocomplete dos tipos do catálogo sem
+ * impedir um nome livre.
+ */
+type DocumentType = CatalogDocumentType | (string & {});
+/** Prompt do documento: os dois campos andam sempre juntos. */
+interface DocumentPrompt {
+    /** Objetivo, tom, regras e informações obrigatórias. */
+    contextualization: string;
+    /** Como o texto deve aparecer: seções, quebras de linha, assinatura. */
+    format: string;
 }
-type DocumentType = 'MEDICAL_RECORD' | 'PRESCRIPTION' | 'CERTIFICATE' | 'REFERRAL' | 'EXAM_REQUEST';
+/**
+ * Corpo aceito por `generateDocument`:
+ *  - `{ documentType }` — tipo do catálogo com o prompt padrão da Sintezy;
+ *  - `{ documentType, ...prompt }` — mesmo tipo, com o SEU prompt;
+ *  - `{ documentType: 'meu_nome', ...prompt }` — documento com nome próprio;
+ *  - `{ ...prompt }` — idem, gravado com o nome `custom`.
+ */
+interface GenerateDocumentInput extends Partial<DocumentPrompt> {
+    documentType?: DocumentType;
+}
+interface Document {
+    secureId: string;
+    /** O tipo com que o documento ficou gravado — use-o no `getDocument`. */
+    type: string;
+    content: unknown;
+    createdAt: string;
+    updatedAt?: string;
+}
+interface DocumentListItem {
+    type: string;
+    exists: boolean;
+    createdAt?: string;
+}
 interface Transcription {
     secureId: string;
     transcription: string | null;
@@ -79,7 +137,9 @@ interface SubscriptionStatus {
     endDate?: string;
     checkoutUrl?: string;
 }
-interface Document {
+interface DeleteResult {
+    message: string;
+    deleted: boolean;
 }
 declare class SintezySDKError extends Error {
     statusCode?: number;
@@ -90,105 +150,62 @@ declare class SintezySDK {
     private config;
     private token;
     constructor(config: SintezySDKConfig);
-    /**
-     * Autentica a aplicação usando OAuth 2.0 Client Credentials
-     *
-     * @returns Token de acesso
-     */
+    /** Autentica via OAuth 2.0 Client Credentials. */
     authenticate(): Promise<AuthToken>;
-    /**
-     * Verifica se está autenticado e se o token ainda é válido
-     */
+    /** True se há token e ele ainda vale por mais de um minuto. */
     isAuthenticated(): boolean;
-    /**
-     * Retorna o token atual (ou null se não autenticado)
-     */
     getToken(): AuthToken | null;
-    /**
-     * Garante que há um token válido, re-autenticando se necessário
-     */
+    /** Autentica se necessário. Chamado por todos os métodos. */
     ensureAuthenticated(): Promise<AuthToken>;
-    /**
-     * Cria uma nova consulta (appointment)
-     *
-     * @param params Parâmetros para criação da consulta
-     * @returns Dados da consulta criada
-     */
+    /** Cria a consulta e devolve a URL do portal de gravação. */
     createAppointment(params: CreateAppointmentParams): Promise<Appointment>;
-    /**
-     * Busca uma consulta pelo ID
-     *
-     * @param appointmentId ID da consulta
-     * @returns Dados da consulta
-     */
-    getAppointment(appointmentId: string): Promise<Appointment>;
-    /**
-     * Busca o status de uma consulta
-     *
-     * @param appointmentId ID da consulta
-     * @returns Status da consulta
-     */
-    getAppointmentStatus(appointmentId: string): Promise<{
-        status: string;
-        updatedAt: string;
-        hasMainDocument: boolean;
-    }>;
-    /**
-     * Lista todos os documentos de uma consulta
-     *
-     * @param appointmentId ID da consulta
-     * @returns Mapa de documentos por tipo
-     */
-    getAppointmentDocuments(appointmentId: string): Promise<Record<string, {
-        exists: boolean;
-    }>>;
-    /**
-     * Busca um documento específico de uma consulta
-     *
-     * @param appointmentId ID da consulta
-     * @param documentType Tipo do documento
-     * @returns Documento
-     */
-    getAppointmentDocument(appointmentId: string, documentType: string): Promise<Document>;
-    /**
-     * Busca a transcrição de uma consulta.
-     *
-     * @param appointmentId ID da consulta
-     * @returns Transcrição da consulta
-     */
-    getTranscription(appointmentId: string): Promise<Transcription>;
-    /**
-     * Consulta o status da assinatura de um email.
-     * Disponível apenas para API Keys do tipo unauthenticated (reseller).
-     *
-     * @param email Email do usuário a consultar
-     * @returns Status da assinatura
-     */
+    getAppointment(appointmentSecureId: string): Promise<Appointment>;
+    /** Exclui a consulta (soft delete). */
+    deleteAppointment(appointmentSecureId: string): Promise<DeleteResult>;
+    /** Transcrição da consulta, quando a gravação já terminou. */
+    getTranscription(appointmentSecureId: string): Promise<Transcription>;
+    /** Status da assinatura de um médico (API keys do tipo reseller). */
     getSubscriptionStatus(email: string): Promise<SubscriptionStatus>;
     /**
-     * Gera um documento a partir de uma consulta
+     * Gera um documento da consulta, que precisa estar finalizada.
      *
-     * @param appointmentId ID da consulta
-     * @param documentType Tipo do documento a ser gerado
-     * @returns Documento gerado
-     */
-    generateDocument(appointmentId: string, documentType: DocumentType): Promise<Document>;
-    /**
-     * Busca um documento gerado
+     * @example
+     * ```typescript
+     * // Tipo do catálogo, prompt padrão da Sintezy
+     * await sdk.generateDocument(id, 'prescription');
      *
-     * @param documentId ID do documento
-     * @returns Dados do documento
+     * // Mesmo tipo, com o seu prompt (continua sendo `clinic_summary`)
+     * await sdk.generateDocument(id, {
+     *   documentType: 'clinic_summary',
+     *   contextualization: '...',
+     *   format: '...',
+     * });
+     *
+     * // Documento com nome próprio, buscado depois por esse nome
+     * await sdk.generateDocument(id, {
+     *   documentType: 'carta_alta',
+     *   contextualization: '...',
+     *   format: '...',
+     * });
+     * ```
      */
-    getDocument(documentId: string): Promise<Document>;
+    generateDocument(appointmentSecureId: string, input: DocumentType | GenerateDocumentInput): Promise<Document>;
     /**
-     * Retorna a URL base da API
+     * Busca um documento já gerado.
+     *
+     * @param documentType Tipo do catálogo, ou o nome que você usou ao gerar
+     *                     (`custom` quando você não informou nenhum).
      */
+    getDocument(appointmentSecureId: string, documentType: DocumentType): Promise<Document>;
+    /** Lista os documentos da consulta e quais já foram gerados. */
+    listDocuments(appointmentSecureId: string): Promise<DocumentListItem[]>;
     private getBaseUrl;
     /**
-     * Faz uma requisição autenticada para a API
-     * Re-autentica automaticamente se o token expirou
+     * Erro da API já traduzido; `message` pode vir string ou array (erros de
+     * validação). Tipado estruturalmente para não exigir a lib DOM no build.
      */
+    private toError;
     private request;
 }
 
-export { type Appointment, type AuthToken, type CreateAppointmentParams, type Document, type DocumentType, type GenerateDocumentParams, SintezySDK, type SintezySDKConfig, SintezySDKError, type SubscriptionStatus, type Transcription, SintezySDK as default };
+export { type Appointment, type AuthToken, CATALOG_DOCUMENT_TYPES, type CatalogDocumentType, type CreateAppointmentParams, type DeleteResult, type Document, type DocumentListItem, type DocumentPrompt, type DocumentType, type GenerateDocumentInput, type Layout, type LayoutField, SintezySDK, type SintezySDKConfig, SintezySDKError, type SubscriptionStatus, type Transcription, SintezySDK as default };
